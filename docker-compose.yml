@@ -1,0 +1,72 @@
+services:
+  linux-mysql:
+    build:
+      context: .
+      dockerfile: ./dockerfiles/Dockerfile.mysql
+    image: mysql:latest
+    container_name: linux-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD1}
+      TZ: Asia/Seoul
+      # MYSQL_DATABASE: mydb
+    #   MYSQL_USER: user
+    #   MYSQL_PASSWORD: password
+      LANG: C.UTF-8
+    volumes:
+      - ./mysql/data:/var/lib/mysql
+    # ports:
+    #   - "3306:3306"
+    networks:
+      - linux-network
+    restart: always
+    
+  linux-java:
+    build:
+      context: .
+      dockerfile: ./dockerfiles/Dockerfile.spring
+    image: linux-java
+    container_name: linux-java
+    volumes:
+      - ./xml/:/app/xml/
+    depends_on:
+      - linux-mysql
+    environment:
+      API_KEY_ID: ${API_KEY_ID}
+      API_KEY: ${API_KEY}
+    # ports:
+    #   - "8080:8080"
+    restart: always
+    networks:
+      - linux-network
+
+  linux-nginx:
+    build:
+      context: .
+      dockerfile: ./dockerfiles/Dockerfile.nginx
+    image: linux-nginx
+    container_name: linux-nginx
+    depends_on:
+      - linux-java
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/html/:/usr/share/nginx/html/ # ./html/을 curl후에 업데이트되는 html폴더에 마운트
+    restart: always
+    networks:
+      - linux-network
+
+  linux-alpine:
+    build:
+      context: .
+      dockerfile: ./dockerfiles/Dockerfile.alpine
+    image: linux-alpine
+    container_name: linux-alpine
+    volumes:
+    - ./xml/:/data/xml/
+    restart: always
+    networks:
+      - linux-network
+
+networks:
+  linux-network:
+    driver: bridge

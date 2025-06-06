@@ -1,0 +1,12 @@
+FROM alpine:latest
+
+RUN apk add --no-cache curl
+
+COPY ./sh/update.sh /usr/local/bin/update.sh
+COPY ./sh/cron /etc/crontabs/root
+
+RUN chmod +x /usr/local/bin/update.sh
+
+# VOLUME ["/data/xml"]
+
+CMD ["crond", "-f", "-l", "8"]
