@@ -46,14 +46,12 @@ services:
     image: linux-nginx
     container_name: linux-nginx
     depends_on:
-      - linux-java
+     - linux-java
     ports:
-      - "80:80"
-    volumes:
-      - ./nginx/html/:/usr/share/nginx/html/ # ./html/을 curl후에 업데이트되는 html폴더에 마운트
-    restart: always
+     - "80:80"
     networks:
-      - linux-network
+     - linux-network
+    restart: always
 
   linux-alpine:
     build:
@@ -62,10 +60,10 @@ services:
     image: linux-alpine
     container_name: linux-alpine
     volumes:
-    - ./xml/:/data/xml/
-    restart: always
+      - ./xml/:/data/xml/
     networks:
       - linux-network
+    restart: always
 
 networks:
   linux-network:
