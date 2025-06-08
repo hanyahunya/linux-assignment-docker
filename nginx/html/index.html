@@ -2,99 +2,241 @@
 <html>
 <head>
   <meta charset="utf-8">
-  <title>linux</title>
+  <title>Map with Sidebar</title>
   <style>
-    body, html {
+    html, body {
       margin: 0;
       padding: 0;
+      height: 100%;
+      overflow: hidden;
     }
-    #map {
-      width: 100%;
+
+    #container {
+      display: flex;
       height: 100vh;
+      width: 100vw;
+    }
+
+    #sidebar {
+      width: 8%;
+      min-width: 100px;
+      background-color: #f4f4f4;
+      padding: 10px;
+      box-sizing: border-box;
+      z-index: 10;
+      overflow-y: auto;
+      font-size: 13px;
+    }
+
+    #map {
+      flex: 1;
+      height: 100vh;
+    }
+
+    .range-label {
+      margin-top: 10px;
+      font-weight: bold;
+    }
+
+    .range-value {
+      margin-bottom: 8px;
+    }
+
+    .floor-input {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .floor-input input {
+      width: 40px;
+      text-align: center;
     }
   </style>
 </head>
 <body>
+<div id="container">
+  <div id="sidebar">
+    <div class="range-label">최소 금액 (만원)</div>
+    <input id="minRange" type="range" min="0" max="500000" step="100" value="0">
+    <div id="minValue" class="range-value">0만원</div>
+
+    <div class="range-label">최대 금액 (만원)</div>
+    <input id="maxRange" type="range" min="0" max="500000" step="100" value="500000">
+    <div id="maxValue" class="range-value">50억원 이상</div>
+
+    <div class="range-label">층 범위</div>
+    <div style="margin-bottom: 8px;">
+      <input id="minFloorInput" type="text" placeholder="1" size="2"
+             oninput="this.value = this.value.replace(/[^0-9]/g, '').slice(0,2); updateUI();">
+      ~
+      <input id="maxFloorInput" type="text" placeholder="40" size="2"
+             oninput="this.value = this.value.replace(/[^0-9]/g, '').slice(0,2); updateUI();">
+      <span id="floorSuffix">층까지</span>
+    </div>
+
+    <div class="range-label">건축년도</div>
+    <input id="minYearInput" type="text" placeholder="1980" size="4"
+         oninput="this.value = this.value.replace(/[^0-9]/g, '').slice(0,4); validateYearInput();">
+    <span>년 이상</span>
+  </div>
+
   <div id="map"></div>
+</div>
 
-  <script type="text/javascript" src="https://oapi.map.naver.com/openapi/v3/maps.js?ncpKeyId=시크릿키"></script>
+<script type="text/javascript" src="https://oapi.map.naver.com/openapi/v3/maps.js?ncpKeyId=시크릿"></script>
+<script>
+  const currentYear = new Date().getFullYear();
 
-  <script>
-    // 지도 생성
-    var map = new naver.maps.Map('map', {
-      center: new naver.maps.LatLng(37.39411289930125, 126.95703000400661),
-      zoom: 14
+  var map = new naver.maps.Map('map', {
+    center: new naver.maps.LatLng(37.39411289930125, 126.95703000400661),
+    zoom: 14
+  });
+
+  var infowindow = new naver.maps.InfoWindow();
+  let allInfos = [];
+  let markers = [];
+
+  function formatDealAmount(amount) {
+    const eok = Math.floor(amount / 10000);
+    const man = amount % 10000;
+    let result = '';
+    if (eok > 0) result += eok + '억';
+    if (man > 0) result += (result ? ' ' : '') + man + '만원';
+    return result || '0만원';
+  }
+
+  function clearMarkers() {
+    markers.forEach(m => m.setMap(null));
+    markers = [];
+  }
+
+  function renderMarkers(filteredInfos) {
+    clearMarkers();
+    const markerMap = new Map();
+
+    filteredInfos.forEach(info => {
+      const key = `${info.latitude},${info.longitude}`;
+      if (!markerMap.has(key)) markerMap.set(key, []);
+      markerMap.get(key).push(info);
     });
 
-    var infowindow = new naver.maps.InfoWindow();
+    markerMap.forEach((infosAtPosition, key) => {
+      const [lat, lng] = key.split(',').map(Number);
+      const position = new naver.maps.LatLng(lat, lng);
 
-    // 금액을 억 단위 + 만 단위로 변환하는 함수
-    function formatDealAmount(amount) {
-      const eok = Math.floor(amount / 10000);
-      const man = amount % 10000;
-      let result = '';
-      if (eok > 0) result += eok + '억';
-      if (man > 0) result += (result ? ' ' : '') + man + '만원';
-      return result || '0만원';
+      const marker = new naver.maps.Marker({
+        position: position,
+        map: map
+      });
+      markers.push(marker);
+
+      naver.maps.Event.addListener(marker, 'click', function() {
+        infosAtPosition.sort((a, b) => new Date(b.dealDay) - new Date(a.dealDay));
+        let content = '<div style="padding:10px;line-height:1.5; max-height:200px; overflow-y:auto;">';
+        infosAtPosition.forEach(info => {
+          content += `
+            <div style="margin-bottom:8px; border-bottom:1px solid #ccc; padding-bottom:5px;">
+              <b>거래일:</b> ${info.dealDay}<br/>
+              <b>거래금액:</b> ${formatDealAmount(info.dealAmount)}<br/>
+              <b>면적:</b> ${info.excluUseAr}㎡<br/>
+              <b>층:</b> ${info.floor}층<br/>
+              <b>건축년도:</b> ${info.buildYear}<br/>
+              <b>거래유형:</b> ${info.dealingGbn}
+            </div>`;
+        });
+        content += '</div>';
+        infowindow.setContent(content);
+        infowindow.open(map, marker);
+      });
+    });
+  }
+
+  fetch('/api/infos')
+    .then(res => res.json())
+    .then(data => {
+      allInfos = data.infos;
+      renderMarkers(allInfos);
+    });
+
+  function sanitizeFloorInput(value) {
+    if (value.trim() === '') return '';
+    let v = parseInt(value.trim(), 10);
+    if (isNaN(v)) return '';
+    if (v < 1) return 1;
+    if (v > 40) return 40;
+    return v;
+  }
+
+  function updateFloorSuffix() {
+    const maxValRaw = document.getElementById('maxFloorInput').value.trim();
+    const maxFloor = sanitizeFloorInput(maxValRaw);
+    const suffix = document.getElementById('floorSuffix');
+
+    suffix.textContent = (maxFloor === 40 && maxValRaw !== '') ? '층 이상' : '층까지';
+  }
+
+  function validateYearInput() {
+    const inputEl = document.getElementById('minYearInput');
+    const value = inputEl.value.trim();
+
+    if (value.length !== 4) {
+      // 4자리 아니면 보정 없이 그냥 표시만
+      document.getElementById('minYearValue').textContent = value ? `${value}년 이상` : `1980년 이상`;
+      updateUI();
+      return;
     }
 
-    // 데이터 요청
-    fetch('/api/infos')
-      .then(response => response.json())
-      .then(data => {
-        const markerMap = new Map(); // 좌표별 데이터 모음
+    let num = parseInt(value, 10);
+    if (isNaN(num)) {
+      inputEl.value = '';
+      return;
+    }
 
-        data.infos.forEach(info => {
-          const key = `${info.latitude},${info.longitude}`;
-          if (!markerMap.has(key)) {
-            markerMap.set(key, []);
-          }
-          markerMap.get(key).push(info);
-        });
+    if (num < 1960) num = 1960;
+    if (num > currentYear) num = currentYear;
 
-        markerMap.forEach((infosAtPosition, key) => {
-          const [lat, lng] = key.split(',').map(Number);
-          const position = new naver.maps.LatLng(lat, lng);
+    inputEl.value = num.toString();
+    document.getElementById('minYearValue').textContent = `${num}년 이상`;
 
-          // 마커 생성
-          const marker = new naver.maps.Marker({
-            position: position,
-            map: map
-          });
+    updateUI();
+  }
 
-          // 마커 클릭 시 정보창 표시
-          naver.maps.Event.addListener(marker, 'click', function() {
-          // 거래일 기준 최신순 정렬
-          infosAtPosition.sort((a, b) => new Date(b.dealDay) - new Date(a.dealDay));
 
-          let contentString = '<div style="padding:10px;line-height:1.5; max-height:200px; overflow-y:auto;">';
-          infosAtPosition.forEach(info => {
-            contentString += `
-              <div style="margin-bottom:8px; border-bottom:1px solid #ccc; padding-bottom:5px;">
-                <b>거래일:</b> ${info.dealDay}<br/>
-                <b>거래금액:</b> ${formatDealAmount(info.dealAmount)}<br/>
-                <b>면적:</b> ${info.excluUseAr}㎡<br/>
-                <b>층:</b> ${info.floor}층<br/>
-                <b>건축년도:</b> ${info.buildYear}<br/>
-                <b>거래유형:</b> ${info.dealingGbn}
-              </div>`;
-          });
-          contentString += '</div>';
-          infowindow.setContent(contentString);
-          infowindow.open(map, marker);
-        });
+  function updateUI() {
+    const min = +document.getElementById('minRange').value;
+    const max = +document.getElementById('maxRange').value;
 
-        });
-      })
-      .catch(error => {
-        console.error('데이터 불러오기 실패:', error);
-      });
+    const minInputRaw = document.getElementById('minFloorInput').value.trim();
+    const maxInputRaw = document.getElementById('maxFloorInput').value.trim();
 
-    // 지도 클릭 시 인포윈도우 닫기
-    naver.maps.Event.addListener(map, 'click', function() {
-      infowindow.close();
+    const minFloor = sanitizeFloorInput(minInputRaw);
+    const maxFloor = sanitizeFloorInput(maxInputRaw);
+
+    const minYearRaw = document.getElementById('minYearInput').value.trim();
+    const minYear = minYearRaw === '' ? 0 : Math.max(1960, Math.min(currentYear, +minYearRaw));
+
+    updateFloorSuffix();
+
+    const filtered = allInfos.filter(info => {
+      const inAmount = info.dealAmount >= min && info.dealAmount <= max;
+      const inYear = info.buildYear >= minYear;
+
+      const inFloor = (minFloor === '' || info.floor >= minFloor) &&
+                      (maxFloor === '' || info.floor <= maxFloor);
+
+      return inAmount && inYear && inFloor;
     });
 
-  </script>
+    infowindow.close();
+    renderMarkers(filtered);
+  }
+
+  ['minRange', 'maxRange', 'minFloorInput', 'maxFloorInput'].forEach(id => {
+    document.getElementById(id).addEventListener('input', updateUI);
+  });
+
+  naver.maps.Event.addListener(map, 'click', () => infowindow.close());
+</script>
 </body>
 </html>
